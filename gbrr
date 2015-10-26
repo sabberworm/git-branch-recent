@@ -3,8 +3,7 @@
 # Show a menu of your recently used Git branches, allowing for a quick branch
 # switch.
 #
-# Usage: gbrr [COUNT]
-#   COUNT is the number of recently used branches to show. Defaults to 10.
+# Usage: gbrr
 #
 # Example:
 #   $ gbrr
@@ -17,26 +16,48 @@
 #   Switched to branch 'f_test-whatever'
 #   Your branch is up-to-date with 'origin/f_test-whatever'.
 
-DEFAULT_COUNT=10
+COUNT=10
 
-COUNT=${1-$DEFAULT_COUNT}
+CURRENT_BRANCH=$(git symbolic-ref --short -q HEAD)
 
 IFS=$'\r\n' BRANCHES=($(
-    git reflog | \
-    sed -n 's/.*checkout: moving from .* to \(.*\)/\1/p' | \
-    perl -ne 'print unless $a{$_}++' | \
-    head -n $COUNT
+	git reflog | \
+	sed -n 's/.*checkout: moving from .* to \(.*\)/\1/p' | \
+	perl -ne 'print unless $a{$_}++'
 ))
 
+if [ ! -z "$CURRENT_BRANCH" ]; then
+	for ((i = 0; i < ${#BRANCHES[@]}; i++)); do
+		if [[ "${BRANCHES[$i]}" == "$CURRENT_BRANCH" || "${BRANCHES[$i]}" =~ ^[0-9a-f]{40}$ ]]; then
+			unset BRANCHES[$i];
+		fi
+	done
+	echo "Current branch: $CURRENT_BRANCH"
+	BRANCHES=("${BRANCHES[@]}")
+fi
+
+BRANCHES=($(for f in "${BRANCHES[@]}"; do echo "$f"; done | head -n $COUNT))
+
 for ((i = 0; i < ${#BRANCHES[@]}; i++)); do
-    echo "$i) ${BRANCHES[$i]}"
+	if [[ $i == $((COUNT-1)) ]]; then
+		c=0;
+	else
+		c=$((i+1));
+	fi
+	echo "$c) ${BRANCHES[$i]}"
 done
 
-read -p "Switch to which branch? "
+read -r -p "Switch to which branch? " -n 1
 if [[ $REPLY != "" ]] && [[ ${BRANCHES[$REPLY]} != "" ]]; then
-    echo
-    set -x
-    git checkout ${BRANCHES[$REPLY]}
+	if [[ $REPLY == 0 ]]; then
+		REPLY=$((COUNT-1));
+	else
+		REPLY=$((REPLY-1));
+	fi
+	echo
+	set -x
+	git checkout "${BRANCHES[$REPLY]}"
 else
-    echo Aborted.
+	echo Aborted.
 fi
+
